@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Site Layout LP Solver Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f9f9f9;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+    }
+    form {
+      background: #fff;
+      padding: 20px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    label {
+      display: inline-block;
+      width: 200px;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+    input {
+      width: 100px;
+      padding: 5px;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      background: #007acc;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #005999;
+    }
+    #layoutCanvas {
+      border: 1px solid #ccc;
+      background: #fff;
+    }
+    #result {
+      margin-top: 20px;
+      background: #eee;
+      padding: 10px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Site Layout LP Solver (Demo)</h1>
+  
+  <form id="lpForm">
+    <label for="width">Site Width (m):</label>
+    <input type="number" id="width" value="200" min="1"><br>
+    
+    <label for="height">Site Height (m):</label>
+    <input type="number" id="height" value="300" min="1"><br>
+    
+    <label for="coverage">Max Coverage (%):</label>
+    <input type="number" id="coverage" value="40" min="0" max="100"><br>
+    
+    <label for="green">Min Green (%):</label>
+    <input type="number" id="green" value="20" min="0" max="100"><br>
+    
+    <label for="numPlots">Number of Plots:</label>
+    <input type="number" id="numPlots" value="3" min="1" max="10"><br>
+    
+    <button type="button" onclick="solveLP()">Solve LP</button>
+  </form>
+  
+  <canvas id="layoutCanvas" width="800" height="600"></canvas>
+  
+  <div id="result"></div>
+</div>
+
+<!-- Include javascript-lp-solver from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/javascript-lp-solver/0.4.24/solver.js"
+        integrity="sha512-WP8R4NKH7Y4+Vr3fEb9L0sFvseO4YXmdum9xsVdD2q7/FL54Zb7K7cyIrg3Vd+BMmboCFR28m2mvUzPHwLLcjQ=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
+
+<script>
+  function solveLP() {
+    // 1. Get user inputs
+    const siteWidth = parseFloat(document.getElementById("width").value);
+    const siteHeight = parseFloat(document.getElementById("height").value);
+    const coverageLimit = parseFloat(document.getElementById("coverage").value) / 100; // e.g. 40% -> 0.4
+    const greenLimit    = parseFloat(document.getElementById("green").value) / 100;    // e.g. 20% -> 0.2
+    const numPlots      = parseInt(document.getElementById("numPlots").value);
+    
+    // 2. Calculate total area
+    const totalArea = siteWidth * siteHeight;
+    
+    // The built-up fraction must be <= coverageLimit and <= (1 - greenLimit)
+    const maxBuiltFraction = Math.min(coverageLimit, 1 - greenLimit);
+    
+    // So the sum of widths for all plots times the siteHeight can't exceed maxBuiltFraction * totalArea
+    // => sum(w_i) * siteHeight <= maxBuiltFraction * totalArea
+    // => sum(w_i) <= (maxBuiltFraction * totalArea) / siteHeight
+    // Also must fit within the site width => sum(w_i) <= siteWidth
+    
+    const maxSumWidth = Math.min(
+      siteWidth,
+      (maxBuiltFraction * totalArea) / siteHeight
+    );
+    
+    // 3. Build LP model
+    let model = {
+      optimize: "totalWidth",
+      opType: "max",
+      constraints: {
+        maxSumWidth: {"<=": maxSumWidth}
+      },
+      variables: {}
+    };
+    
+    for (let i = 1; i <= numPlots; i++) {
+      model.variables["w" + i] = {
+        maxSumWidth: 1,  // each w_i adds 1 to the sum we compare to maxSumWidth
+        totalWidth: 1    // each w_i contributes 1 to the objective we want to maximize
+      };
+    }
+    
+    // 4. Solve the model
+    const results = solver.Solve(model);
+    console.log("LP Results:", results);
+    
+    // 5. Visualization
+    const canvas = document.getElementById("layoutCanvas");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw site boundary
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+    
+    // Scale factors (to fit the entire site in the canvas)
+    const scaleX = (canvas.width - 20) / siteWidth;
+    const scaleY = (canvas.height - 20) / siteHeight;
+    
+    let startX = 10;
+    let usedWidthSum = 0;
+    
+    for (let i = 1; i <= numPlots; i++) {
+      const w = results["w" + i] || 0;
+      usedWidthSum += w;
+      
+      // Drawing dimensions
+      const drawWidth  = w * scaleX;
+      const drawHeight = siteHeight * scaleY;
+      
+      // Fill color
+      ctx.fillStyle = `rgba(${50 + i*30}, 100, 200, 0.5)`;
+      ctx.fillRect(startX, 10, drawWidth, drawHeight);
+      
+      // Label
+      ctx.fillStyle = "black";
+      ctx.fillText(`Plot ${i}`, startX + 5, 25);
+      
+      // Move to next plot position horizontally
+      startX += drawWidth;
+    }
+    
+    // 6. Display results
+    const builtUpArea = usedWidthSum * siteHeight;
+    const coverageUsedPercent = (builtUpArea / totalArea) * 100;
+    
+    const resultDiv = document.getElementById("result");
+    resultDiv.innerHTML = `
+      <h3>Solution Results</h3>
+      <p><strong>Widths of Plots (m):</strong> 
+         ${Array.from({length: numPlots}, (_, idx) => (results["w" + (idx + 1)] || 0).toFixed(2)).join(", ")}</p>
+      <p><strong>Total Built-up Area:</strong> ${builtUpArea.toFixed(2)} m<sup>2</sup></p>
+      <p><strong>Coverage Used:</strong> ${coverageUsedPercent.toFixed(2)}%</p>
+      <p><em>Max Coverage Allowed:</em> ${(coverageLimit * 100).toFixed(2)}%<br/>
+         <em>Min Green Required:</em> ${(greenLimit * 100).toFixed(2)}%</p>
+    `;
+  }
+</script>
+
+</body>
+</html>
