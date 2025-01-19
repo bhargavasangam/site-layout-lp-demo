@@ -84,11 +84,8 @@
   <div id="result"></div>
 </div>
 
-<!-- Include javascript-lp-solver from CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/javascript-lp-solver/0.4.24/solver.js"
-        integrity="sha512-WP8R4NKH7Y4+Vr3fEb9L0sFvseO4YXmdum9xsVdD2q7/FL54Zb7K7cyIrg3Vd+BMmboCFR28m2mvUzPHwLLcjQ=="
-        crossorigin="anonymous"
-        referrerpolicy="no-referrer"></script>
+<!-- Use jsDelivr for javascript-lp-solver -->
+<script src="https://cdn.jsdelivr.net/npm/javascript-lp-solver@0.4.24/dist/solver.js"></script>
 
 <script>
   function solveLP() {
@@ -105,11 +102,9 @@
     // The built-up fraction must be <= coverageLimit and <= (1 - greenLimit)
     const maxBuiltFraction = Math.min(coverageLimit, 1 - greenLimit);
     
-    // So the sum of widths for all plots times the siteHeight can't exceed maxBuiltFraction * totalArea
-    // => sum(w_i) * siteHeight <= maxBuiltFraction * totalArea
+    // So sum(w_i)*siteHeight <= maxBuiltFraction*totalArea
     // => sum(w_i) <= (maxBuiltFraction * totalArea) / siteHeight
     // Also must fit within the site width => sum(w_i) <= siteWidth
-    
     const maxSumWidth = Math.min(
       siteWidth,
       (maxBuiltFraction * totalArea) / siteHeight
@@ -127,8 +122,8 @@
     
     for (let i = 1; i <= numPlots; i++) {
       model.variables["w" + i] = {
-        maxSumWidth: 1,  // each w_i adds 1 to the sum we compare to maxSumWidth
-        totalWidth: 1    // each w_i contributes 1 to the objective we want to maximize
+        maxSumWidth: 1,  // each w_i contributes 1 to the sum
+        totalWidth: 1    // each w_i contributes 1 to objective
       };
     }
     
@@ -136,7 +131,7 @@
     const results = solver.Solve(model);
     console.log("LP Results:", results);
     
-    // 5. Visualization
+    // 5. Visualization on canvas
     const canvas = document.getElementById("layoutCanvas");
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -146,7 +141,7 @@
     ctx.lineWidth = 2;
     ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
     
-    // Scale factors (to fit the entire site in the canvas)
+    // Scale factors
     const scaleX = (canvas.width - 20) / siteWidth;
     const scaleY = (canvas.height - 20) / siteHeight;
     
@@ -169,7 +164,7 @@
       ctx.fillStyle = "black";
       ctx.fillText(`Plot ${i}`, startX + 5, 25);
       
-      // Move to next plot position horizontally
+      // Move to next plot horizontally
       startX += drawWidth;
     }
     
@@ -192,3 +187,4 @@
 
 </body>
 </html>
+
